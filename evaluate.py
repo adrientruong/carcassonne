@@ -28,7 +28,7 @@ tile_test1 = {
 	'27': 'D',
 	'29': 'D',
 	'30': 'V',
-	'31': 'R',
+	'31': 'P',
 	'32': 'R',
 	'33': 'V',
 	'34': 'L',
@@ -56,12 +56,16 @@ def test_tile_set(set_name, labeled_tiles):
 	tiles = [cv2.imread('data/' + set_name + '/' + name + '.png') for name in labeled_tiles]
 	predicted_labels = classifier.process({'tiles': tiles})['tile_labels']
 	num_correct = 0
-	for predicted, truth in zip(predicted_labels, labeled_tiles.values()):
+	errors = []
+	for tile, predicted, truth in zip(labeled_tiles, predicted_labels, labeled_tiles.values()):
 		if predicted == truth:
 			num_correct += 1
+		else:
+			errors.append((tile, predicted, truth))
 	total = len(tiles)
 	percent_correct = (float(num_correct) / total) * 100
 	print('{}: {}/{}, {}%'.format(set_name, num_correct, total, percent_correct))
+	print('Errors:', errors)
 
 def test_tile_classifier():
 	for set_name, labeled_tiles in tile_sets.items():

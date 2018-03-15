@@ -11,11 +11,6 @@ class ThresholdHSV(PipelineStep):
 		img = inputs['img']
 		img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 		mask = cv2.inRange(img_hsv, self.lower, self.upper)
-
-		# corners = inputs['corners']
-		# #corners = cv2.dilate(corners, None)
-		# img[corners>0.01*corners.max()] = [0, 0, 255]
-		
 		result = cv2.bitwise_and(img, img, mask=mask)
 
 		outputs = {'img': result, 'debug_img': result}

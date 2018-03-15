@@ -1,44 +1,55 @@
 from enum import Enum
 
-class TileSideType(Enum):
-	RIVER = 1,
+class TileFeature(Enum):
+	NONE = 0,
+	RIVER,
 	ROAD,
 	GRASS,
-	CITY,
+	CITY
+
+class FeatureLocation(Enum):
+	CENTER = 1,
+	LEFT,
+	RIGHT,
+	BOTTOM,
+	TOP
 
 class TileSide(Enum):
 	LEFT = 1,
 	RIGHT,
-	ABOVE,
-	BELOW
+	TOP,
+	BOTTOM
 
 	def opposite(self):
 		if self == LEFT:
 			return RIGHT
 		elif self == RIGHT:
 			return LEFT
-		elif self == ABOVE:
-			return BELOW
-		elif self == BELOW:
-			return ABOVE
+		elif self == TOP:
+			return BOTTOM
+		elif self == BOTTOM:
+			return TOP
+		elif self == CENTER:
+			assert("Opposite of center doesn't make sense!")
 
 class Tile:
-	def __init__(self, has_pennant, left, top, right, bottom):
+	def __init__(self, left, top, right, bottom, image, has_pennant=False):
 		self.left = left
 		self.top = top
 		self.right = right
-		self.bottom = bottom.
+		self.bottom = bottom
+		self.image = image
 		self.has_pennant = hasPennant
 
-	def side_type(self, direction):
-		if direction == LEFT:
+	def edge_feature(self, direction):
+		if direction == TileSide.LEFT:
 			return self.left
-		elif direction == RIGHT:
+		elif direction == TileSide.RIGHT:
 			return self.right
-		elif direction == ABOVE:
+		elif direction == TileSide.TOP:
 			return self.top
-		elif direction == BELOW:
+		elif direction == TileSide.BOTTOM:
 			return self.bottom
 
 	def can_place(self, position, tile):
-		return self.side_type(position.opposite()) == tile.side_type(position)
+		return self.edge_feature(position) == tile.edge_feature(position.opposite())

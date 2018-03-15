@@ -4,13 +4,14 @@ import numpy as np
 from utils import *
 
 class HoughLineTransform(PipelineStep):
-    def __init__(self, rho_step, theta_step, threshold):
+    def __init__(self, rho_step, theta_step, threshold, key='edges'):
         self.rho_step = rho_step
         self.theta_step = theta_step
         self.threshold = threshold
+        self.key = key
 
     def process(self, inputs, visualize=False):
-        edges = inputs['edges']
+        edges = inputs[self.key]
         lines = cv2.HoughLines(edges, self.rho_step, self.theta_step, self.threshold)
         lines = np.squeeze(lines)
 
@@ -23,15 +24,16 @@ class HoughLineTransform(PipelineStep):
         return outputs
 
 class HoughLineProbabilisticTransform(PipelineStep):
-    def __init__(self, rho_step, theta_step, threshold, min_line_len, max_line_gap):
+    def __init__(self, rho_step, theta_step, threshold, min_line_len, max_line_gap, key='edges'):
         self.rho_step = rho_step
         self.theta_step = theta_step
         self.threshold = threshold
         self.min_line_len = min_line_len
         self.max_line_gap = max_line_gap
+        self.key = key
 
     def process(self, inputs, visualize=False):
-        edges = inputs['edges']
+        edges = inputs[self.key]
 
         lines = cv2.HoughLinesP(edges,
                                 self.rho_step,
@@ -39,9 +41,10 @@ class HoughLineProbabilisticTransform(PipelineStep):
                                 self.threshold,
                                 self.min_line_len,
                                 self.max_line_gap)
-        lines = np.squeeze(lines)
+        if lines is not None:
+            lines = np.squeeze(lines, axis=1)
 
-        outputs = {'lines': lines}
+        outputs = {'line_segments': lines}
         if visualize:
             img_copy = np.copy(inputs['img'])
             #draw_2point_lines(img_copy, lines)

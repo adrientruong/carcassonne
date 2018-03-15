@@ -1,38 +1,58 @@
 from pipeline import PipelineStep
 import cv2
 import numpy as np
+from utils import *
 
 class CorrectPerspective(PipelineStep):
-	def process(self, inputs, visualize=False):
-		img = inputs['img']
-		camera_points = inputs['camera_points']
-		side = 64*5
-		world_points = np.array([[0, 0],
-		                         [side, 0],
-		                         [side, side],
-		                         [0, side]], dtype='float32')
-		for i in range(world_points.shape[0]):
-		    world_points[i] += np.array([200, 250])
+    def process(self, inputs, visualize=False):
+        img = inputs['img']
+        H = inputs['H']
+        (min_x, max_x), (min_y, max_y) = get_xy_range_of_transformation(img, H)
+        t_x = -np.floor(min_x)
+        t_y = -np.floor(min_y)
+        t = np.array([[1, 0, t_x],
+                      [0, 1, t_y],
+                      [0, 0, 1]])
+        new_H = t.dot(H)
+        new_w = int(np.ceil(max_x - min_x))
+        new_h = int(np.ceil(max_y - min_y))
+        birds_eye_img = cv2.warpPerspective(img, new_H, (new_w, new_h))
 
-		M = cv2.getPerspectiveTransform(camera_points, world_points)
-		top_down = cv2.warpPerspective(img, M, (1000, 1500))
+        outputs = {'img': birds_eye_img, 'debug_img': birds_eye_img}
 
-		outputs = {'img': top_down, 'debug_img': top_down}
-		return outputs
+        return outputs
 
-# 	def process(self, inputs, visualize=False):
-# 		img = inputs['img']
-# 		line_points1 = inputs['points1']
-# 		line_points2 = inputs['points2']
+# class CorrectPerspective(PipelineStep):
+#   def process(self, inputs, visualize=False):
+#       img = inputs['img']
+#       camera_points = inputs['camera_points']
+#       side = 64*5
+#       world_points = np.array([[0, 0],
+#                                [side, 0],
+#                                [side, side],
+#                                [0, side]], dtype='float32')
+#       for i in range(world_points.shape[0]):
+#           world_points[i] += np.array([200, 250])
 
-# 		vanishing_point1 = compute_vanishing_point(line_points1)
-# 		vanishing_point2 = compute_vanishing_point(line_points2)
+#       M = cv2.getPerspectiveTransform(camera_points, world_points)
+#       top_down = cv2.warpPerspective(img, M, (1000, 1500))
 
-# 		horizon_line = np.cross(vanishing_point1, vanishing_point2)
+#       outputs = {'img': top_down, 'debug_img': top_down}
+#       return outputs
+
+#   def process(self, inputs, visualize=False):
+#       img = inputs['img']
+#       line_points1 = inputs['points1']
+#       line_points2 = inputs['points2']
+
+#       vanishing_point1 = compute_vanishing_point(line_points1)
+#       vanishing_point2 = compute_vanishing_point(line_points2)
+
+#       horizon_line = np.cross(vanishing_point1, vanishing_point2)
 
 
-# 		outputs = {'img': top_down, 'debug_img': top_down}
-# 		return outputs
+#       outputs = {'img': top_down, 'debug_img': top_down}
+#       return outputs
 
 # def compute_rectified_image(im, H):
 #     new_x = np.zeros(im.shape[:2])
