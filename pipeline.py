@@ -40,7 +40,7 @@ class Pipeline:
 			cv2.waitKey(0)
 			cv2.destroyAllWindows()
 
-		return outputs
+		return inputs
 
 class PipelineStep:
 	def process(self, inputs, visualize=False):

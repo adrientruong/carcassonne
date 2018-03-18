@@ -22,7 +22,7 @@ class FindTilesNew(PipelineStep):
             img_p = img_p.astype(np.float32)
             return img_p
 
-        edge_detector = CannyEdgeDetector(75, 200)
+        #cv2.imshow('homography', inputs['debug_img'])
         for y_index, x_index in product(range(-10, 10), range(-10, 10)):
             padding = self.padding
 
@@ -47,7 +47,6 @@ class FindTilesNew(PipelineStep):
             min_x = max(0, min_x)
             min_y = max(0, min_y)
 
-            tile = img[min_y:max_y, min_x:max_x]
             world_points = np.array([[0, 0],
                                     [64, 0],
                                     [64, 64],
@@ -55,6 +54,7 @@ class FindTilesNew(PipelineStep):
             img_points = np.array([tl, tr, br, bl])
             transform = cv2.getPerspectiveTransform(img_points, world_points)
             tile = cv2.warpPerspective(img, transform, (64, 64))
+            #show_image(tile)
             rects.append(((min_x, min_y), (max_x, max_y)))
             tiles.append(tile)
             locations.append((x_index + 10, y_index + 10))

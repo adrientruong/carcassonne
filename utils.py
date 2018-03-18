@@ -4,8 +4,8 @@ import cv2
 def round_nearest(x, base=5):
     return int(base * round(float(x)/base))
 
-def show_image(img):
-    cv2.imshow('image', img)
+def show_image(img, name='image'):
+    cv2.imshow(name, img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 

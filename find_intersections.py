@@ -114,6 +114,10 @@ class FindIntersections(PipelineStep):
         polar_lines1 = polar_lines[indices1]
         polar_lines2 = polar_lines[indices2]
 
+        if polar_lines1.shape[0] == 0 or polar_lines2.shape[0] == 0:
+            print('Not enough orthogonal lines!')
+            return None
+        
         polar_lines1, line_segments1 = self.filter_outliers(polar_lines1, line_segments1)
         polar_lines2, line_segments2 = self.filter_outliers(polar_lines2, line_segments2)
 

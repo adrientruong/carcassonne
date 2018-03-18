@@ -22,16 +22,8 @@ def img_range_with_color(lower, upper, value):
 
 	return img
 
-lower_img = img_with_color(green_lower)
-#lower_img[:, :] = (0, 255, 0)
-upper_img = img_with_color(green_upper)
-
-for value in range(255, -1, -1):
-	range_img = img_range_with_color((0, 0, 0), (180, 255, 255), value)
+lower_blue = (0, 0, 0)
+upper_blue = (255, 90, 90)
+for v in range(50, 90):
+	range_img = img_range_with_color(lower_blue, upper_blue, v)
 	show_image(range_img)
-
-for value in range(green_lower[2], green_upper[2]):
-	range_img = img_range_with_color(green_lower, green_upper, value)
-	show_image(range_img)
-
-show_images([lower_img, upper_img])

@@ -4,18 +4,18 @@ import numpy as np
 
 class HarrisCornerDetector(PipelineStep):
     def process(self, inputs, visualize=False):
-        img = inputs['img']
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = np.float32(gray)
-        dst = cv2.cornerHarris(gray, blockSize=2, ksize=3, k=0.04)
+        img = inputs['edges']
+        #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        #gray = np.float32(gray)
+        dst = cv2.cornerHarris(img, blockSize=2, ksize=3, k=0.04)
         ret, dst = cv2.threshold(dst,0.01*dst.max(),255,0)
         dst = np.uint8(dst)
-        outputs = {'img': img, 'corners': dst}
+        outputs = {'img': inputs['img'], 'corners': dst}
         
         if visualize:
             dst = cv2.dilate(dst, None)
             img_copy = np.copy(img)
-            img_copy[dst>0] = [0, 0, 255]
+            img_copy[dst>0] = 255
             outputs['debug_img'] = img_copy
 
         return outputs
