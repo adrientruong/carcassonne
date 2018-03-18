@@ -57,7 +57,7 @@ class FindTilesNew(PipelineStep):
             #show_image(tile)
             rects.append(((min_x, min_y), (max_x, max_y)))
             tiles.append(tile)
-            locations.append((x_index + 10, y_index + 10))
+            locations.append((x_index, y_index))
 
         outputs = {'tiles': tiles, 'tile_locations': locations}
 

@@ -3,7 +3,7 @@ import numpy as np
 from resize import *
 
 class VideoFeed():
-    def __init__(self, process, fps=10, num_frames_similar_threshold=3, diff_threshold=2000000):
+    def __init__(self, process, fps=10, num_frames_similar_threshold=3, diff_threshold=3000000):
         self.fps = fps
         self.num_frames_similar_threshold = num_frames_similar_threshold
         self.diff_threshold = diff_threshold

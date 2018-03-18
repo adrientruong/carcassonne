@@ -90,10 +90,19 @@ class CarcGameState:
 
 		return True
 
+	def required_features_for_placement(self, pos):
+		features = {}
+		for edge in TileEdge.all_edges():
+			adj_pos = self.position_on_edge_of_position(pos, edge)
+			adj_tile = self.tile_at_position(adj_pos)
+			if adj_tile is not None:
+				features[edge.feature_location()] = adj_tile.feature_on_edge(edge.opposite())
+
+		return features
+
 	def add_tile(self, tile, position):
 		assert position not in self.tiles_by_position, 'Cannot place tile, tile already there'
 		assert self.can_place_tile(tile, position), 'Invalid tile placement! Features dont match'
-
 		self.tiles_by_position[position] = tile
 
 	def add_piece(self, position, player_index):
@@ -120,7 +129,7 @@ class CarcGameState:
 		valid_positions = set()
 		for position in self.tiles_by_position:
 			for adj_pos in self.manhattan_positions_around(position):
-				if self.tile_at_position(adj_pos) == None:
+				if self.tile_at_position(adj_pos) is None:
 					valid_positions.add(adj_pos)
 		return valid_positions
 
@@ -260,7 +269,6 @@ class CarcGameState:
 
 	def copy(self):
 		copy = CarcGameState(list(self.players))
-		return copy
 
 		tiles_by_position_copy = {}
 		for position, tile in self.tiles_by_position.items():
@@ -270,6 +278,8 @@ class CarcGameState:
 
 		copy.current_player_index = self.current_player_index
 		copy.player_points = list(self.player_points)
+
+		return copy
 
 
 class Player:

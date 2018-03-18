@@ -14,101 +14,6 @@ class ClassifiedTile():
         self.letter = letter
         self.rotation = rotation
 
-class FeaturedBasedTileClassifier(PipelineStep):
-    def __init__(self):
-        self.edge_detector = CannyEdgeDetector(30, 100)
-        self.templates = self.generate_templates()
-
-    def generate_templates(self):
-        templates = []
-        for letter in string.ascii_uppercase[:24]:
-            name = 'data/tiles/' + letter + '.png'
-            tile_img = cv2.imread(name)
-            tile_img = cv2.resize(tile_img, (64, 64))
-            t = self.generate_template(tile_img)
-            #cv2.imwrite('data/tiles/templates/' + letter + '.png', t[0])
-            templates.append(t)
-        return templates
-
-    def generate_template(self, img):
-        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-        left_edge = img_hsv[:, :20]
-        right_edge = img_hsv[:, -20:]
-        top_edge = img_hsv[:20, :]
-        bottom_edge = img_hsv[-20:, :]
-        center = img_hsv[20:-20, 20:-20, :]
-
-        left_avg_hue = left_edge[:, :, 0].mean()
-        right_avg_hue = right_edge[:, :, 0].mean()
-        top_avg_hue = top_edge[:, :, 0].mean()
-        bottom_avg_hue = bottom_edge[:, :, 0].mean()
-        center_avg_hue = center[:, :, 0].mean()
-
-        features = np.array([left_avg_hue, right_avg_hue, top_avg_hue, bottom_avg_hue, center_avg_hue])
-
-        return features, img
-
-    def classify_tile(self, raw_tile):
-        winning_scores = []
-        winning_rotations = []
-        for template_features, raw_template in self.templates:
-            max_score = 100000
-            winning_rotation = -1
-            for r in range(4):
-                rotated_tile = np.rot90(raw_tile, k=r)
-                tile_features, _ = self.generate_template(rotated_tile)
-                score = np.linalg.norm(tile_features - template_features)
-                if score < max_score:
-                    max_score = score
-                    winning_rotation = 4-r
-                #show_images([tile, rotated_template])
-
-            winning_scores.append(max_score)
-            winning_rotations.append(winning_rotation)
-
-        winning_scores = np.array(winning_scores)
-        #print(np.sort(winning_scores).astype(np.int32))
-
-        label = np.argmax(winning_scores)
-        rotation = winning_rotations[label]
-        letter = string.ascii_uppercase[label]
-
-        # winning_template_edges = self.templates[label][0]
-        # winning_template_edges = np.rot90(winning_template_edges, k=rotation)
-        winning_template = self.templates[label][1]
-        winning_template = np.rot90(winning_template, k=rotation)
-        # ratio = np.mean(winning_template_edges) / np.mean(tile)
-        # if ratio > 1.5:
-        #     return None
-
-        #show_images([tile, winning_template_edges])
-        show_images([cv2.cvtColor(raw_tile, cv2.COLOR_BGR2GRAY), cv2.cvtColor(winning_template, cv2.COLOR_BGR2GRAY)])
-
-        classified = ClassifiedTile(raw_tile, winning_template, letter, rotation)
-
-        return classified
-
-    def process(self, inputs, visualize=False):
-        tiles = inputs['tiles']
-        classified_tiles = [self.classify_tile(t) for t in tiles]
-
-        locations = inputs['tile_locations']
-        actual_classsified_tiles = []
-        actual_locations = []
-        for tile, location in zip(classified_tiles, locations):
-            if tile is not None:
-                actual_classsified_tiles.append(tile)
-                actual_locations.append(location)
-
-
-        outputs = {'classified_tiles': actual_classsified_tiles, 'classified_locations': actual_locations}
-        if visualize:
-            img_copy = np.copy(inputs['img'])
-            outputs['debug_img'] = img_copy
-
-        return outputs
-
 class TileClassifier(PipelineStep):
     def __init__(self):
         self.edge_detector = CannyEdgeDetector(100, 175)
@@ -117,14 +22,14 @@ class TileClassifier(PipelineStep):
     def normalized_img(self, img):
         img = np.copy(img)
         img = img.astype(np.int32)
-        img[img == 0] = -1
-        img[img == 255] = 1
-        # img = img.astype('float32')
-        # mean = img.mean()
-        # std = img.std()
-        # std = max(std, 0.0000001)
-        # img -= mean
-        # img /= std
+        # img[img == 0] = -1
+        # img[img == 255] = 1
+        img = img.astype('float32')
+        mean = img.mean()
+        std = img.std()
+        std = max(std, 0.0000001)
+        img -= mean
+        img /= std
 
         return img
 
@@ -195,7 +100,9 @@ class TileClassifier(PipelineStep):
 
         #template = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        return mask
+        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        #return mask
 
     def generate_templates(self):
         templates = []
@@ -329,7 +236,7 @@ class TileClassifier(PipelineStep):
 
         sorted_scores = np.sort(winning_scores)
         delta = sorted_scores[-1] - sorted_scores[-2]
-        if delta < 200 and False:
+        if delta < 200 or True:
             winning_feature = winning_features[label]
             print('tile_feature:', tile_feature)
             print('template feature:', winning_feature)
@@ -338,7 +245,9 @@ class TileClassifier(PipelineStep):
             for i in np.argsort(winning_scores):
                 print(letters[i], winning_scores[i])
             print('-' * 80)
-            show_images([raw_tile, tile, self.templates[label][0], winning_template])
+            winning_raw_template = self.templates[label][0]
+            winning_raw_template = np.rot90(winning_raw_template, k=rotation)
+            show_images([raw_tile, tile, winning_raw_template, winning_template])
 
         # show_images([tile, winning_template_edges])
         #show_image(raw_tile)
@@ -355,6 +264,8 @@ class TileClassifier(PipelineStep):
         classified_tiles = [self.classify_tile(t) for t in tiles]
 
         locations = inputs['tile_locations']
+        print('all tiles:', classified_tiles)
+        print('all locations:', locations)
         actual_classsified_tiles = []
         actual_locations = []
         for tile, location in zip(classified_tiles, locations):

@@ -10,10 +10,7 @@ class BoardImageTranslator():
         self.origin = np.array([0, 0])
         if img_origin is not None:
             board_origin = self.img_p_to_board_p(img_origin)
-            new_board_origin_x = int(round_nearest(board_origin[0], 64) / 64)
-            new_board_origin_y = int(round_nearest(board_origin[1], 64) / 64)
-
-            self.origin = np.array([new_board_origin_x, new_board_origin_y])
+            self.origin = np.array(board_origin)
 
     def new_translator_with_img_origin(self, origin):
         return BoardImageTranslator(self.H, self.H_inv, origin)
@@ -24,6 +21,7 @@ class BoardImageTranslator():
     def board_p_to_img_p(self, p):
         p = np.array(p)
         p += self.origin
+        p *= 64
         p = np.append(p, 1)
         image_point = self.H_inv.dot(p.reshape(3, 1))
         image_point = np.squeeze(image_point)
@@ -41,47 +39,73 @@ class BoardImageTranslator():
         board_p = board_p.astype(np.int32)
         board_p -= self.origin
 
-        return board_p
+        print('actual board p', board_p, 'from ', p)
 
-    def board_pos_to_tile_bbox(self, p):
-        tl = self.board_p_to_img_p(p)
-        br = self.board_p_to_img_p((p[0] + 64, p[1] + 64))
+        nearest_x = int(round_nearest(board_p[0], 64) / 64)
+        nearest_y = int(round_nearest(board_p[1], 64) / 64)
 
-        if tl[0] > br[0]:
-            temp_tl = tl
-            tl = br
-            br = temp_tl
+        print('nearestxy:', (nearest_x, nearest_y))
 
-        return (tl, br)
+        return (nearest_x, nearest_y)
 
-    def tile_img_at_pos(self, pos):
-        x_index, y_index = pos
-        tl = self.board_p_to_img_p(x_index * 64, y_index * 64)
-        tr = self.board_p_to_img_p(x_index * 64 + 64, y_index * 64)
-        bl = self.board_p_to_img_p(x_index * 64, y_index * 64 + 64)
-        br = self.board_p_to_img_p(x_index * 64 + 64, y_index * 64 + 64)
-        min_x = int(min(tl[0], bl[0]))
-        min_y = int(min(tl[1], tr[1]))
-        max_x = int(max(tr[0], br[0]))
-        max_y = int(max(bl[1], br[1]))
+    def board_pos_from_box(self, box):
+        min_x = 1000
+        min_y = 1000
+        for img_p in box:
+            board_p = self.img_p_to_board_p(img_p)
+            min_x = min(board_p[0], min_x)
+            min_y = min(board_p[1], min_y)
 
-        if min_x < -50:
-            return None
-        if min_y < -50:
-            return None
-        if max_x >= img.shape[1] + 50:
-            return None
-        if max_y >= img.shape[0] + 50:
-            return None
+        return (min_x, min_y)
 
-        min_x = max(0, min_x)
-        min_y = max(0, min_y)
+    def tile_img_from_box(self, img, box):
+        point_map = {}
+        print('box:', box)
+        for img_p in box:
+            board_p = self.img_p_to_board_p(img_p)
+            print('board_p', board_p)
+            point_map[board_p] = img_p
+            print('setting point map!')
+        print(sorted(point_map.keys()))
+        img_pts = [point_map[key] for key in sorted(point_map.keys())]
+        tl = img_pts[0]
+        bl = img_pts[1]
+        tr = img_pts[2]
+        br = img_pts[3]
 
         world_points = np.array([[0, 0],
                                 [64, 0],
                                 [64, 64],
                                 [0, 64]], dtype=np.float32)
-        img_points = np.array([tl, tr, br, bl])
+        img_points = np.array([tl, tr, br, bl], dtype=np.float32)
+        transform = cv2.getPerspectiveTransform(img_points, world_points)
+        tile = cv2.warpPerspective(img, transform, (64, 64))
+
+        return tile
+
+    def board_pos_to_tile_bbox(self, pos):
+        x, y = pos
+        tl = self.board_p_to_img_p((x, y))
+        tr = self.board_p_to_img_p((x + 1, y))
+        bl = self.board_p_to_img_p((x, y + 1))
+        br = self.board_p_to_img_p((x + 1, y + 1))
+
+        img_x, img_y, w, h = cv2.boundingRect(np.array([tl, br, bl, br]))
+
+        return ((img_x, img_y), (img_x+w, img_y+h))
+
+    def tile_img_at_pos(self, img, pos):
+        x_index, y_index = pos
+        tl = self.board_p_to_img_p((x_index, y_index))
+        tr = self.board_p_to_img_p((x_index + 1, y_index))
+        br = self.board_p_to_img_p((x_index + 1, y_index + 1))
+        bl = self.board_p_to_img_p((x_index, y_index + 1))
+
+        world_points = np.array([[0, 0],
+                                [64, 0],
+                                [64, 64],
+                                [0, 64]], dtype=np.float32)
+        img_points = np.array([tl, tr, br, bl], dtype=np.float32)
         transform = cv2.getPerspectiveTransform(img_points, world_points)
         tile = cv2.warpPerspective(img, transform, (64, 64))
 

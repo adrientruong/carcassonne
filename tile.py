@@ -25,6 +25,16 @@ class TileEdge(Enum):
 	def all_edges():
 		return [TileEdge.LEFT, TileEdge.RIGHT, TileEdge.TOP, TileEdge.BOTTOM]
 
+	def feature_location(self):
+		if self == TileEdge.LEFT:
+			return FeatureLocation.LEFT
+		elif self == TileEdge.RIGHT:
+			return FeatureLocation.RIGHT
+		elif self == TileEdge.TOP:
+			return FeatureLocation.TOP
+		elif self == TileEdge.BOTTOM:
+			return FeatureLocation.BOTTOM
+
 	def opposite(self):
 		if self == TileEdge.LEFT:
 			return TileEdge.RIGHT
@@ -40,7 +50,7 @@ class Tile:
 		self.features = features
 		self.img = img
 		for connection in feature_connections:
-			feature = self.feature_on_edge(feature_connections[0])
+			feature = self.feature_on_edge(connection[0])
 			for edge in connection:
 				assert self.feature_on_edge(edge) == feature, 'Connections are not of same type'
 		self.feature_connections = feature_connections
@@ -55,13 +65,22 @@ class Tile:
 			return self.features[FeatureLocation.RIGHT]
 		elif edge == TileEdge.BOTTOM:
 			return self.features[FeatureLocation.BOTTOM]
+		else:
+			assert False, 'Invalid edge'
 
 	def feature_at_location(self, location):
 		return self.features.get(location, None)
 
 	def all_connecting_edges_set(self):
 		if len(self.feature_connections) > 0:
-			return self.feature_connections
+			connecting_edges_set = []
+			remaining_edges = set(TileEdge.all_edges())
+			for connection in self.feature_connections:
+				for edge in connection:
+					remaining_edges.remove(edge)
+			for edge in remaining_edges:
+				connecting_edges_set.append([edge])
+			return connecting_edges_set
 		else:
 			return [[edge] for edge in TileEdge.all_edges()]
 
@@ -76,23 +95,40 @@ class Tile:
 
 
 	def tile_by_rotating(self, r):
-		features_list = [self.features[FeatureLocation.LEFT],
-						self.features[FeatureLocation.TOP],
-						self.features[FeatureLocation.RIGHT],
-						self.features[FeatureLocation.BOTTOM]]
-		d = collections.deque(features_list)
+		edge_list = [TileEdge.LEFT, TileEdge.TOP, TileEdge.RIGHT, TileEdge.BOTTOM]
+		d = collections.deque(edge_list)
 		d.rotate(-r)
-		rotated_features_list = list(d)
+		rotated_edge_list = list(d)
 
-		rotated_features = dict(self.features)
-		rotated_features[FeatureLocation.LEFT] = rotated_features_list[0]
-		rotated_features[FeatureLocation.TOP] = rotated_features_list[1]
-		rotated_features[FeatureLocation.RIGHT] = rotated_features_list[2]
-		rotated_features[FeatureLocation.BOTTOM] = rotated_features_list[3]
+		edge_map = {
+			rotated_edge_list[0]: TileEdge.LEFT,
+			rotated_edge_list[1]: TileEdge.TOP,
+		 	rotated_edge_list[2]: TileEdge.RIGHT,
+			rotated_edge_list[3]: TileEdge.BOTTOM,
+		}
+
+		location_map = { orig_e.feature_location(): rot_e.feature_location() for orig_e, rot_e in edge_map.items() }
+		location_map[FeatureLocation.CENTER] = FeatureLocation.CENTER
+
+		rotated_features = {}
+		for location, feature in self.features.items():
+			rot_loc = location_map[location]
+			rotated_features[rot_loc] = feature
+
+		rotated_feature_connections = []
+		for connection in self.feature_connections:
+			rot_connection = [edge_map[e] for e in connection]
+			rotated_feature_connections.append(rot_connection)
 
 		rotated_img = np.rot90(self.img, k=r)
 
-		return Tile(rotated_features, rotated_img, has_pennant=self.has_pennant)
+		return Tile(rotated_features, rotated_img, feature_connections=rotated_feature_connections, has_pennant=self.has_pennant)
+
+	def has_features(self, features):
+		for location, feature in features.items():
+			if self.feature_at_location(location) != feature:
+				return False
+		return True
 
 	def copy(self):
 		return Tile(self.features, self.img, self.feature_connections, self.has_pennant)

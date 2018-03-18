@@ -16,7 +16,10 @@ from board_reconstructor import *
 from piece_detector import *
 from game import *
 from default_tiles import get_default_tiles
+from game_state_drawer import *
+from better_tile_classifier import TileClassifierNew
 
+from utils import *
 from timeit import default_timer as timer
 
 class Tracker():
@@ -52,6 +55,7 @@ class Tracker():
 
         self.full = full_pipeline
         self.partial = partial_pipeline
+        self.tile_classifier = TileClassifierNew()
 
         self.prev_outputs = None
         self.last_full_run = 0
@@ -60,9 +64,12 @@ class Tracker():
 
         player1 = Player('Adrien')
         player2 = Player('Kyle')
+        self.previous_game_state = None
         self.game_state = CarcGameState([player1, player2])
 
-        self.reference_board_origin = None
+        self.translator = None
+        self.board_homography = None
+        self.last_turn = None
 
     def diff_between_frames(self, frame1, frame2):
         frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
@@ -78,32 +85,38 @@ class Tracker():
 
         return diff
 
-    def normalized_translator(self, outputs):
-        board_p_to_img_p = outputs['board_p_to_img_p']
-        if self.reference_board_origin is None:
-            return
+    def classify_tile_at_pos(self, img, pos):
+        known_features = self.game_state.required_features_for_placement(pos)
+        tile = self.tile_classifier.classify(img, known_features)
 
-        img_p_to_board_p = outputs['img_p_to_board_p']
-        board_origin = img_p_to_board_p(self.reference_board_origin)
-        new_board_origin_x = int(round_nearest(board_origin[0], 64) / 64)
-        new_board_origin_y = int(round_nearest(board_origin[1], 64) / 64)
+        return tile
 
-        def normalized_img_p_to_board_p(p):
-            board_p = img_p_to_board_p(p)
-            return (board_p[0] - new_board_origin_x, board_p[1] - new_board_origin_y)
+    def add_turn_for_frame(self, turn, frame):
+        self.previous_game_state = self.game_state
+        self.game_state = self.game_state.after_playing_turn(turn)
+        self.last_turn = turn
+        self.last_frame = frame
 
-        def normalized_board_p_to_img_p(p):
-            p = (p[0] + new_board_origin_x, p[1] + new_board_origin_y)
-            return board_p_to_img_p(p)
+        for player, points in zip(self.game_state.players, self.game_state.player_points):
+            print('{}: {}'.format(player.name, points))
+        print('-' * 80)
+        self.show_game_state()
 
-        board_pos_to_tile_bbox = outputs['board_pos_to_tile_bbox']
-        def normalized_board_pos_to_tile_bbox(p):
-            p = (p[0] + new_board_origin_x, p[1] + new_board_origin_y)
-            return board_pos_to_tile_bbox(p)
+    def add_piece_to_last_turn_with_frame(self, frame):
+        self.game_state = self.previous_game_state
+        new_turn = Turn(self.last_turn.tile, self.last_turn.position, place_piece=True)
+        self.game_state = self.game_state.after_playing_turn(new_turn)
+        self.last_turn = new_turn
+        self.last_frame = frame
 
-        outputs['img_p_to_board_p'] = normalized_img_p_to_board_p
-        outputs['board_p_to_img_p'] = normalized_board_p_to_img_p
-        outputs['board_pos_to_tile_bbox'] = normalized_board_pos_to_tile_bbox
+        for player, points in zip(self.game_state.players, self.game_state.player_points):
+            print('{}: {}'.format(player.name, points))
+        print('-' * 80)
+        self.show_game_state()
+
+    def show_game_state(self):
+        board_img = draw_game_state(self.game_state)
+        cv2.imshow('board state', board_img)
 
     def process_frame(self, frame):
         #print('last full run:', self.last_full_run)
@@ -112,78 +125,85 @@ class Tracker():
             self.last_frame = frame
             return
 
-        heat_map = self.heat_map_between_frames(self.last_frame, frame)
-        # if heat_map.sum() < 3000000:
-        #     # not different enough
-        #     return
-        resizer = Resize(max_width=800)
-        last_frame = resizer.process({'img': self.last_frame})['img']
-        frame_smaller = resizer.process({'img': frame})['img']
-        heat_map = resizer.process({'img': heat_map})['img']
-
-        outputs = self.full.run({'img': frame}, visualize=False)
-        if outputs is None:
-            return
-
-        possible_new_tile_pos = self.game_state.placeable_positions()
-        translator = outputs['board_img_translator']
-        translator = translator.new_translator_with_img_origin(self.reference_board_origin)
-
         if self.game_state.turn_num == 0:
-            default_tiles = get_default_tiles()
-            print(outputs['classified_tiles'])
-            classified_tile = outputs['classified_tiles'][0]
-            self.reference_board_origin = translator.get_img_origin()
-            print('img_origin:', self.reference_board_origin)
-            game_tile = default_tiles[classified_tile.letter].tile_by_rotating(classified_tile.rotation)
-            turn = Turn(game_tile, (0, 0))
-            self.game_state = self.game_state.after_playing_turn(turn)
-            cv2.imshow('homography', outputs['board_homography'])
-            return
-
-        pos_with_new_tile = None
-        max_diff = 0
-        for pos in self.game_state.placeable_positions():
-            tl, br = translator.board_pos_to_tile_bbox(pos)
-            width = br[0] - tl[0]
-            height = br[1] - tl[1]
-            img_area = heat_map[tl[1]:tl[1]+height, tl[0]:tl[0]+width]
-            diff = img_area.sum()
-            print('heatmap diff:', diff)
-            if diff > max_diff:
-                max_diff = diff
-                pos_with_new_tile = pos
-        NEW_TILE_DIFF_THRESHOLD = 50000
-        if max_diff > NEW_TILE_DIFF_THRESHOLD:
-            print('pos with new tile:', pos_with_new_tile)
-            print('max diff', max_diff)
-
-            self.last_frame = frame
-        #show_images([last_frame, frame_smaller, heat_map])
-
-        return
-
-        frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-        frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-        diff = cv2.absdiff(frame1, frame2).sum()
-
-        if timer() - self.last_full_run > 30:
-            print('Starting from scracth!')
-            self.prev_outputs = None
-
-        if self.prev_outputs is None:
             outputs = self.full.run({'img': frame}, visualize=False)
-            self.last_full_run = timer()
+            if outputs is None:
+                return
+
+            default_tiles = get_default_tiles()
+            classified_tile = outputs['classified_tiles'][0]
+            location = outputs['classified_locations'][0]
+            self.translator = outputs['board_img_translator']
+            img_origin = self.translator.board_p_to_img_p(location)
+            self.translator = self.translator.new_translator_with_img_origin(img_origin)
+            game_tile = default_tiles[classified_tile.letter].tile_by_rotating(classified_tile.rotation)
+            #game_tile = default_tiles['B'].tile_by_rotating(classified_tile.rotation)
+            #show_image(game_tile.img, 'detected img')
+            turn = Turn(game_tile, (0, 0))
+            self.add_turn_for_frame(turn, frame)
+            self.board_homography = outputs['board_homography']
+            cv2.imshow('homography', self.board_homography)
         else:
-            self.prev_outputs['img'] = frame
-            outputs = self.partial.run(self.prev_outputs)
-            #outputs = self.full.run({'img': frame})
+            cv2.imshow('homography', self.board_homography)
 
-        if outputs is None:
-            return None
+            heat_map = self.heat_map_between_frames(self.last_frame, frame)
+            resizer = Resize(max_width=800)
+            #last_frame = resizer.process({'img': self.last_frame})['img']
+            #frame_smaller = resizer.process({'img': frame})['img']
+            heat_map = resizer.process({'img': heat_map})['img']
 
-        self.prev_outputs = outputs
+            pos_with_new_tile = None
+            #translator = translator.new_translator_with_img_origin(self.reference_board_origin)
+            NEW_TILE_DIFF_THRESHOLD = 50000
+            max_diff = 0
+            raw_img = None
+            positions_to_check = list(self.game_state.placeable_positions())
+            positions_to_check.append(self.last_turn.position)
+            for pos in positions_to_check:
+                #print('checking pos:', pos)
+                #cv2.imshow('heat map', heat_map)
+                tl, br = self.translator.board_pos_to_tile_bbox(pos)
+                width = br[0] - tl[0]
+                height = br[1] - tl[1]
+                img_area = heat_map[tl[1]:tl[1]+height, tl[0]:tl[0]+width]
+                diff = img_area.sum()
+                #print('heatmap diff:', diff)
+                if diff > NEW_TILE_DIFF_THRESHOLD and diff > max_diff:
+                    max_diff = diff
+                    pos_with_new_tile = pos
+                    raw_img = img_area
 
-        self.last_frame = frame
+            if pos_with_new_tile is not None:
+                if pos_with_new_tile == self.last_turn.position:
+                    self.add_piece_to_last_turn_with_frame(frame)
+                    return
 
-        return outputs
+                thresholded = np.copy(heat_map)
+                thresholded[thresholded > 50] = 255
+                thresholded[thresholded <= 50] = 0
+                kernel = np.ones((5,5),np.uint8)
+                thresholded = cv2.morphologyEx(thresholded, cv2.MORPH_CLOSE, kernel)
+                #show_image(thresholded, 'thresh!')
+                im2, contours, hierarchy = cv2.findContours(thresholded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                biggest_contour = sorted(contours, key=cv2.contourArea)[-1]
+                rect = cv2.minAreaRect(biggest_contour)
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+                #print('box:', box)
+                #cv2.drawContours(thresholded,[box],0,(100),5)
+                #print('rect:', rect)
+
+                #show_image(thresholded, 'heat_map')
+                print('pos with new tile:', pos_with_new_tile)
+                print('max diff', max_diff)
+
+                resizer = Resize(max_width=800)
+                resized_frame = resizer.process({'img': frame})['img']
+                #new_tile_img = self.translator.tile_img_at_pos(resized_frame, pos_with_new_tile)
+                new_tile_img = self.translator.tile_img_from_box(resized_frame, box)
+                game_tile = self.classify_tile_at_pos(new_tile_img, pos_with_new_tile)
+                turn = Turn(game_tile, pos_with_new_tile)
+                self.add_turn_for_frame(turn, frame)
+                #show_images([raw_img, new_tile_img])
+                #show_image(new_tile_img, 'new tile')
+        self.show_game_state()

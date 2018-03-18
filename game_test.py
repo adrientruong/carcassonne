@@ -4,6 +4,8 @@ from game import *
 from default_tiles import *
 from game_state_drawer import *
 
+from utils import *
+
 def show_state(state):
     for player, points in zip(state.players, state.player_points):
         print('{}: {}'.format(player.name, points))
@@ -89,10 +91,56 @@ def test_basic_completed_city2():
 
     assert state.points_of_player_index(1) == 4
 
+def test_basic_completed_city3():
+    player1 = Player('Adrien')
+    player2 = Player('Kyle')
+    players = [player1, player2]
+    state = CarcGameState(players)
+
+    turn1 = Turn(tiles['L'], (0, 0))
+    state = state.after_playing_turn(turn1)
+
+    turn2 = Turn(tiles['G'].tile_by_rotating(1), (1, 0), place_piece=True)
+    state = state.after_playing_turn(turn2)
+
+    assert state.points_of_player_index(1) == 0
+
+    turn3 = Turn(tiles['E'].tile_by_rotating(1), (2, 0))
+    state = state.after_playing_turn(turn3)
+
+    assert state.points_of_player_index(1) == 6, 'expected 8 got: {}'.format(state.points_of_player_index(1))
+
+def test_placeable_positions():
+    player1 = Player('Adrien')
+    player2 = Player('Kyle')
+    players = [player1, player2]
+    state = CarcGameState(players)
+
+    turn1 = Turn(tiles['E'], (0, 0))
+    state = state.after_playing_turn(turn1)
+
+    turn2 = Turn(tiles['E'].tile_by_rotating(2), (0, -1), place_piece=True)
+    state = state.after_playing_turn(turn2)
+
+    positions = [
+        (0, -2),
+        (1, -1),
+        (1, 0),
+        (0, 1),
+        (-1, 0),
+        (-1, -1)
+    ]
+    placeable_positions = state.placeable_positions()
+    for p in positions:
+        assert p in placeable_positions, 'expected {} in placeable positions'.format(p)
+
+
 test_player_index_changes_after_turns()
 test_completed_monastery()
 test_basic_completed_city1()
 test_basic_completed_city2()
+test_basic_completed_city3()
+test_placeable_positions()
 
 print('All gucci!')
 
