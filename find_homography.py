@@ -24,30 +24,6 @@ class RANSACHomography(PipelineStep):
         error = np.linalg.norm(points2 - projected_points, axis=1)
         return error
 
-    def is_reasonable_homography(self, H_inv):
-        def board_p_to_image_p(p):
-            p = np.array(p)
-            p = np.append(p, 1)
-            image_point = H_inv.dot(p.reshape(3, 1))
-            image_point = np.squeeze(image_point)
-            image_point = image_point[:2] / image_point[2]
-            image_point = image_point.astype('int64')
-            return image_point
-
-        for x_i, y_i in np.ndindex((5, 5)):
-            x = x_i * 64
-            y = y_i * 64
-            p1 = board_p_to_image_p((x, y))
-            p2 = board_p_to_image_p((x, y + 64))
-            p3 = board_p_to_image_p((x + 64, y))
-            dist_p1_p2 = np.linalg.norm(p1 - p2)
-            dist_p1_p3 = np.linalg.norm(p1 - p3)
-            if max(dist_p1_p2, dist_p1_p3) > 80 and np.abs(dist_p1_p3 - dist_p1_p2) >= 0.5 * min(dist_p1_p2, dist_p1_p3):
-                print('distances:', dist_p1_p2, dist_p1_p3)
-                return False
-
-        return True
-
     def process(self, inputs, visualize=False):
         image_points = inputs['intersections']
         labels = inputs['intersection_labels']
@@ -71,43 +47,21 @@ class RANSACHomography(PipelineStep):
             board_points.append([x_coord * 64, y_coord * 64])
         board_points = np.array(board_points)
 
-        # make copy b/c of weird layout bug
-        # open cv complains if we use image_points directly
-        copy = []
-        for p in image_points:
-            copy.append(p)
-        copy = np.array(copy, dtype=np.float32)
-        gray_img = cv2.cvtColor(inputs['img'], cv2.COLOR_BGR2GRAY)
-        criteria = (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 30, 0.001)
-        cv2.cornerSubPix(gray_img, copy, (5, 5), (-1, -1), criteria)
-        image_points = copy
-
-        H, _ = cv2.findHomography(image_points, board_points, cv2.RANSAC, 5.0)
-        if H is None:
-            print('Coud not generate homography!')
+        board_img_translator = BoardImageTranslator()
+        result = board_img_translator.fit(image_points, board_points, inputs['img'])
+        if not result:
             return None
-
-        H_inv, _ = cv2.findHomography(board_points, image_points, cv2.RANSAC, 5.0)
-        if not self.is_reasonable_homography(H_inv):
-            print('Generated homography does not look correct. Aborting.')
-            return None
-
-        board_img_translator = BoardImageTranslator(H, H_inv)
 
         outputs = {
-            'H': H,
-            'H_inv': H_inv,
+            'H': board_img_translator.H,
+            'H_inv': board_img_translator.H_inv,
             'board_img_translator': board_img_translator
         }
         visualize = True
         if visualize:
             debug_img = np.copy(inputs['img'])
             for x, y in product(range(-10, 10), range(-10, 10)):
-                point = np.array([x * 64, y * 64, 1])
-                image_point = H_inv.dot(point.reshape(3, 1))
-                image_point = np.squeeze(image_point)
-                image_point = image_point[:2] / image_point[2]
-                image_point = image_point.astype('int64')
+                image_point = board_img_translator.board_p_to_img_p((x, y))
                 cv2.circle(debug_img, center=tuple(image_point), radius=2, thickness=2, color=(0, 0, 255))
                 cv2.putText(debug_img, '({}, {})'.format(x, y), org=tuple(image_point), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.4, color=(0, 0, 0))
             outputs['debug_img'] = debug_img

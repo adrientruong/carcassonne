@@ -236,7 +236,7 @@ class TileClassifier(PipelineStep):
 
         sorted_scores = np.sort(winning_scores)
         delta = sorted_scores[-1] - sorted_scores[-2]
-        if delta < 200 or True:
+        if delta < 200 or False:
             winning_feature = winning_features[label]
             print('tile_feature:', tile_feature)
             print('template feature:', winning_feature)

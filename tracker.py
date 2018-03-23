@@ -16,10 +16,11 @@ from board_reconstructor import *
 from piece_detector import *
 from game import *
 from default_tiles import get_default_tiles
-from game_state_drawer import *
 from better_tile_classifier import TileClassifierNew
 
 from utils import *
+from game_state_drawer import *
+from translator_drawer import *
 from timeit import default_timer as timer
 
 class Tracker():
@@ -154,7 +155,7 @@ class Tracker():
 
             pos_with_new_tile = None
             #translator = translator.new_translator_with_img_origin(self.reference_board_origin)
-            NEW_TILE_DIFF_THRESHOLD = 50000
+            NEW_TILE_DIFF_THRESHOLD = 150000
             max_diff = 0
             raw_img = None
             positions_to_check = list(self.game_state.placeable_positions())
@@ -167,13 +168,14 @@ class Tracker():
                 height = br[1] - tl[1]
                 img_area = heat_map[tl[1]:tl[1]+height, tl[0]:tl[0]+width]
                 diff = img_area.sum()
-                #print('heatmap diff:', diff)
+                print('heatmap diff:', diff)
                 if diff > NEW_TILE_DIFF_THRESHOLD and diff > max_diff:
                     max_diff = diff
                     pos_with_new_tile = pos
                     raw_img = img_area
 
             if pos_with_new_tile is not None:
+                print('max_diff:', max_diff)
                 if pos_with_new_tile == self.last_turn.position:
                     self.add_piece_to_last_turn_with_frame(frame)
                     return
@@ -183,27 +185,57 @@ class Tracker():
                 thresholded[thresholded <= 50] = 0
                 kernel = np.ones((5,5),np.uint8)
                 thresholded = cv2.morphologyEx(thresholded, cv2.MORPH_CLOSE, kernel)
+
+                resizer = Resize(max_width=800)
+                thresholded = resizer.process({'img': thresholded})['img']
+
                 #show_image(thresholded, 'thresh!')
                 im2, contours, hierarchy = cv2.findContours(thresholded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if len(contours) == 0:
+                    print('Found difference with 0 contours. Aborting!')
+                    return
+
                 biggest_contour = sorted(contours, key=cv2.contourArea)[-1]
-                rect = cv2.minAreaRect(biggest_contour)
-                box = cv2.boxPoints(rect)
-                box = np.int0(box)
-                #print('box:', box)
-                #cv2.drawContours(thresholded,[box],0,(100),5)
+                epsilon = cv2.arcLength(biggest_contour, True) * 0.1
+                box = cv2.approxPolyDP(biggest_contour, epsilon, True)
+
+                #rect = cv2.minAreaRect(biggest_contour)
+                #box = cv2.boxPoints(rect)
+                #box = approx
+                #box = np.int0(box)
+                box = np.squeeze(box)
+
+                cv2.drawContours(thresholded,[box],0,(100),5)
                 #print('rect:', rect)
 
                 #show_image(thresholded, 'heat_map')
+                cv2.imshow('heat_map', thresholded)
                 print('pos with new tile:', pos_with_new_tile)
                 print('max diff', max_diff)
 
-                resizer = Resize(max_width=800)
+
                 resized_frame = resizer.process({'img': frame})['img']
-                #new_tile_img = self.translator.tile_img_at_pos(resized_frame, pos_with_new_tile)
-                new_tile_img = self.translator.tile_img_from_box(resized_frame, box)
+
+                if box.shape[0] == 4:
+                    print('refining!')
+                    box_board_p = []
+                    for img_p in box:
+                        board_p = self.translator.img_p_to_board_p(img_p)
+                        box_board_p.append(board_p)
+                    self.translator.refine(box, box_board_p, resized_frame)
+
+                board_homography = np.copy(resized_frame)
+                draw_translator(board_homography, self.translator)
+                self.board_homography = board_homography
+
+                new_tile_img = self.translator.tile_img_at_pos(resized_frame, pos_with_new_tile)
+                #new_tile_img = self.translator.tile_img_from_box(resized_frame, box)
                 game_tile = self.classify_tile_at_pos(new_tile_img, pos_with_new_tile)
+                cv2.imshow('new_tile_img', new_tile_img)
+                #show_image(new_tile_img)
                 turn = Turn(game_tile, pos_with_new_tile)
                 self.add_turn_for_frame(turn, frame)
+                #show_image(new_tile_img)
                 #show_images([raw_img, new_tile_img])
                 #show_image(new_tile_img, 'new tile')
         self.show_game_state()

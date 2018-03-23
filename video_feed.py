@@ -25,8 +25,14 @@ class VideoFeed():
 
     def start(self):
         cap = cv2.VideoCapture(0)
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) + 0.5)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) + 0.5)
+        out = cv2.VideoWriter('data/test_vids/output.mp4', fourcc, 30, (width, height), True)
         while (True):
             ret, frame = cap.read()
+            out.write(frame)
+
             self.num_frames += 1
             if self.num_frames % self.fps == 0:
                 self.num_frames = 0
@@ -55,4 +61,5 @@ class VideoFeed():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         cap.release()
+        out.release()
         cv2.destroyAllWindows()

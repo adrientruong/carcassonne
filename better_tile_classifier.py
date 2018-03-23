@@ -1,14 +1,16 @@
-from default_tiles import *
 import cv2
+
+from default_tiles import *
+from utils import *
+from canny import *
 
 class TileClassifierNew():
     def __init__(self):
         self.default_tiles = get_default_tiles()
 
     def normalized_img(self, img):
-        img = np.copy(img)
-        img = img.astype(np.int32)
-        img = img.astype('float32')
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = img.astype(np.float32)
         mean = img.mean()
         std = img.std()
         std = max(std, 0.0000001)
@@ -19,9 +21,9 @@ class TileClassifierNew():
 
     def normalized_mask(self, mask):
         mask = np.copy(mask)
+        mask = mask.astype(np.int32)
         mask[mask == 0] = -1
         mask[mask > 0] = 1
-        mask = mask.astype(np.int32)
 
         return mask
 
@@ -46,6 +48,11 @@ class TileClassifierNew():
                 cv2.drawContours(mask, [c], -1, (0, 0, 255), cv2.FILLED)
                 mask[y:y+h, x:x+w] = 0
 
+        canny = CannyEdgeDetector(100, 175)
+        mask = canny.process({'img': img})['edges']
+        kernel = np.ones((2, 2), np.uint8)
+        mask = cv2.dilate(mask, kernel, iterations=1)
+
         return mask
 
     def cross_correlation(self, img1, img2):
@@ -55,6 +62,7 @@ class TileClassifierNew():
         normalized_unknown = self.normalized_img(unknown_tile_img)
         unknown_mask = self.masked_img(unknown_tile_img)
         normalized_unknown_mask = self.normalized_mask(unknown_mask)
+
 
         best_score = 0
         best_tile = None
@@ -66,15 +74,17 @@ class TileClassifierNew():
                 if not rotated_tile.has_features(known_features):
                     continue
 
-                resized_tile_img = cv2.resize(rotated_tile.img, (64, 64))
+                tile_img = rotated_tile.img[4:-4, 4:-4]
+                resized_tile_img = cv2.resize(tile_img, (64, 64))
                 normalized_tile_img = self.normalized_img(resized_tile_img)
                 tile_mask = self.masked_img(resized_tile_img)
                 normalized_tile_mask = self.normalized_mask(tile_mask)
                 img_score = self.cross_correlation(normalized_tile_img, normalized_unknown)
-                img_score /= 10000
-                mask_score = self.cross_correlation(normalized_tile_mask, normalized_unknown_mask)
-                mask_score /= 10000
-                score = 75 * img_score + 25 * mask_score
+                # img_score /= 10000
+                # mask_score = self.cross_correlation(normalized_tile_mask, normalized_unknown_mask)
+                # mask_score /= 10000
+                # score = 50 * img_score + 50 * mask_score
+                score = img_score
                 if score > best_score:
                     best_score = score
                     best_tile = rotated_tile
@@ -82,7 +92,7 @@ class TileClassifierNew():
             if best_tile_score > 0:
                 scores_by_letter[letter] = best_tile_score
 
-        for key in sorted(scores_by_letter.keys(), key=lambda k: scores_by_letter[k]):
-            print(key, scores_by_letter[key])
+        #for key in sorted(scores_by_letter.keys(), key=lambda k: scores_by_letter[k]):
+        #    print(key, scores_by_letter[key])
 
         return best_tile
