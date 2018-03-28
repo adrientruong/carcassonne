@@ -155,7 +155,7 @@ class Tracker():
 
             pos_with_new_tile = None
             #translator = translator.new_translator_with_img_origin(self.reference_board_origin)
-            NEW_TILE_DIFF_THRESHOLD = 150000
+            NEW_TILE_DIFF_THRESHOLD = 75000
             max_diff = 0
             raw_img = None
             positions_to_check = list(self.game_state.placeable_positions())
@@ -209,7 +209,7 @@ class Tracker():
                 #print('rect:', rect)
 
                 #show_image(thresholded, 'heat_map')
-                cv2.imshow('heat_map', thresholded)
+                #cv2.imshow('heat_map', thresholded)
                 print('pos with new tile:', pos_with_new_tile)
                 print('max diff', max_diff)
 
@@ -231,7 +231,7 @@ class Tracker():
                 new_tile_img = self.translator.tile_img_at_pos(resized_frame, pos_with_new_tile)
                 #new_tile_img = self.translator.tile_img_from_box(resized_frame, box)
                 game_tile = self.classify_tile_at_pos(new_tile_img, pos_with_new_tile)
-                cv2.imshow('new_tile_img', new_tile_img)
+                #cv2.imshow('new_tile_img', new_tile_img)
                 #show_image(new_tile_img)
                 turn = Turn(game_tile, pos_with_new_tile)
                 self.add_turn_for_frame(turn, frame)
